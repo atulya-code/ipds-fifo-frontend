@@ -1,3 +1,4 @@
+
 {
   "rewrites": [
     {
@@ -7,6 +8,10 @@
     {
       "source": "/api/:path*",
       "destination": "https://ipds-fifo-management.onrender.com/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
