@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiRequest } from "../services/api";
@@ -7,6 +6,8 @@ function StockBatchDetails() {
   const { batchId } = useParams();
 
   const [batch, setBatch] = useState(null);
+  const [movementHistory, setMovementHistory] = useState([]);
+  const [allocationHistory, setAllocationHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -18,22 +19,24 @@ function StockBatchDetails() {
         setLoading(true);
         setError("");
 
-        const data = await apiRequest(
-          `/api/stock/batches/${batchId}`
-        );
+        const data = await apiRequest(`/api/stock/batches/${batchId}`);
 
         if (cancelled) return;
 
         if (data?.success && data.batch) {
           setBatch(data.batch);
+          setMovementHistory(
+            Array.isArray(data.movementHistory) ? data.movementHistory : []
+          );
+          setAllocationHistory(
+            Array.isArray(data.allocationHistory) ? data.allocationHistory : []
+          );
         } else {
           setError(data?.message || "Batch details not found.");
         }
       } catch (err) {
         if (!cancelled) {
-          setError(
-            err?.message || "Unable to load batch details."
-          );
+          setError(err?.message || "Unable to load batch details.");
         }
       } finally {
         if (!cancelled) {
@@ -63,6 +66,36 @@ function StockBatchDetails() {
       month: "short",
       year: "numeric",
     });
+  };
+
+  const formatDateTime = (date) => {
+    if (!date) return "Not available";
+
+    const parsedDate = new Date(date);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return "Not available";
+    }
+
+    return parsedDate.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const displayValue = (value) => {
+    if (value === null || value === undefined || value === "") {
+      return "Not available";
+    }
+
+    if (typeof value === "object") {
+      return value.name || value.challanNumber || "Not available";
+    }
+
+    return value;
   };
 
   const details = batch
@@ -100,6 +133,40 @@ function StockBatchDetails() {
     border: "1px solid #e2e8f0",
     borderRadius: "10px",
     overflowWrap: "anywhere",
+  };
+
+  const sectionStyle = {
+    marginTop: "28px",
+    marginBottom: "14px",
+  };
+
+  const tableWrapperStyle = {
+    overflowX: "auto",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    borderRadius: "10px",
+  };
+
+  const tableStyle = {
+    width: "100%",
+    borderCollapse: "collapse",
+    minWidth: "700px",
+  };
+
+  const headerCellStyle = {
+    textAlign: "left",
+    padding: "12px",
+    background: "#f1f5f9",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: "13px",
+    whiteSpace: "nowrap",
+  };
+
+  const cellStyle = {
+    textAlign: "left",
+    padding: "12px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: "14px",
   };
 
   if (loading) {
@@ -184,25 +251,146 @@ function StockBatchDetails() {
       >
         {details.map(([label, value]) => (
           <div key={label} style={cardStyle}>
-            <div style={{ color: "#64748b", fontSize: "13px", marginBottom: "8px" }}>
+            <div
+              style={{
+                color: "#64748b",
+                fontSize: "13px",
+                marginBottom: "8px",
+              }}
+            >
               {label}
             </div>
-            <strong>
-              {value !== null && value !== undefined && value !== ""
-                ? value
-                : "Not available"}
-            </strong>
+            <strong>{displayValue(value)}</strong>
           </div>
         ))}
       </div>
 
-      <h2 style={{ marginTop: "28px" }}>Notes</h2>
+      <h2 style={sectionStyle}>Notes</h2>
       <div style={cardStyle}>
         {batch.notes || "No notes recorded for this batch."}
       </div>
 
+      <h2 style={sectionStyle}>Stock Movement History</h2>
+      <p style={{ color: "#64748b" }}>
+        Record of stock received, dispatched or otherwise moved for this batch.
+      </p>
+
+      {movementHistory.length === 0 ? (
+        <div style={cardStyle}>No stock movement records found for this batch.</div>
+      ) : (
+        <div style={tableWrapperStyle}>
+          <table style={tableStyle}>
+            <thead>
+              <tr>
+                <th style={headerCellStyle}>Date</th>
+                <th style={headerCellStyle}>Movement</th>
+                <th style={headerCellStyle}>Direction</th>
+                <th style={headerCellStyle}>Quantity</th>
+                <th style={headerCellStyle}>Challan</th>
+                <th style={headerCellStyle}>Performed By</th>
+                <th style={headerCellStyle}>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {movementHistory.map((movement, index) => (
+                <tr key={movement._id || index}>
+                  <td style={cellStyle}>{formatDateTime(movement.createdAt)}</td>
+                  <td style={cellStyle}>{displayValue(movement.movementType)}</td>
+                  <td style={cellStyle}>{displayValue(movement.direction)}</td>
+                  <td style={cellStyle}>
+                    {movement.quantity ?? "Not available"}{" "}
+                    {movement.unit || ""}
+                  </td>
+                  <td style={cellStyle}>
+                    {movement.challan?.challanNumber || "—"}
+                    {movement.challan?.status
+                      ? ` (${movement.challan.status})`
+                      : ""}
+                  </td>
+                  <td style={cellStyle}>
+                    {movement.performedBy?.name || "Not available"}
+                  </td>
+                  <td style={cellStyle}>{displayValue(movement.reason)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <h2 style={sectionStyle}>FIFO Allocation History</h2>
+      <p style={{ color: "#64748b" }}>
+        Delivery challans that used stock from this batch.
+      </p>
+
+      {allocationHistory.length === 0 ? (
+        <div style={cardStyle}>
+          No dispatched or delivered challans have used this batch yet.
+        </div>
+      ) : (
+        <div style={tableWrapperStyle}>
+          <table style={tableStyle}>
+            <thead>
+              <tr>
+                <th style={headerCellStyle}>Challan Number</th>
+                <th style={headerCellStyle}>Status</th>
+                <th style={headerCellStyle}>FPS</th>
+                <th style={headerCellStyle}>Godown</th>
+                <th style={headerCellStyle}>Commodity</th>
+                <th style={headerCellStyle}>Requested</th>
+                <th style={headerCellStyle}>Allocated From Batch</th>
+                <th style={headerCellStyle}>Dispatch Date</th>
+                <th style={headerCellStyle}>Delivery Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allocationHistory.map((allocation, index) => (
+                <tr key={`${allocation.challanId || allocation.challanNumber || "allocation"}-${index}`}>
+                  <td style={cellStyle}>
+                    {displayValue(allocation.challanNumber)}
+                  </td>
+                  <td style={cellStyle}>
+                    {displayValue(allocation.challanStatus)}
+                  </td>
+                  <td style={cellStyle}>
+                    {allocation.fps?.name || "Not available"}
+                    {allocation.fps?.fpsCode
+                      ? ` (${allocation.fps.fpsCode})`
+                      : ""}
+                  </td>
+                  <td style={cellStyle}>
+                    {allocation.godown?.name || "Not available"}
+                    {allocation.godown?.godownCode
+                      ? ` (${allocation.godown.godownCode})`
+                      : ""}
+                  </td>
+                  <td style={cellStyle}>
+                    {allocation.commodity?.name || "Not available"}
+                  </td>
+                  <td style={cellStyle}>
+                    {allocation.requestedQuantity ?? "Not available"}{" "}
+                    {allocation.unit || ""}
+                  </td>
+                  <td style={cellStyle}>
+                    {allocation.allocatedQuantity ?? "Not available"}{" "}
+                    {allocation.unit || ""}
+                  </td>
+                  <td style={cellStyle}>
+                    {formatDateTime(allocation.dispatchedAt)}
+                  </td>
+                  <td style={cellStyle}>
+                    {formatDateTime(allocation.deliveredAt)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <p style={{ color: "#64748b", fontSize: "13px", marginTop: "24px" }}>
-        Movement and allocation history has not yet been added to this page.
+        History is based on recorded stock movements and dispatched or delivered
+        challans.
       </p>
     </div>
   );
