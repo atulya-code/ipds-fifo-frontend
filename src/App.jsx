@@ -10,6 +10,7 @@ import StockBatches from "./pages/StockBatches";
 import Challans from "./pages/Challans";
 import Movements from "./pages/Movements";
 import StockReceipt from "./pages/stockReceipt";
+import StockBatchDetails from "./pages/StockBatchDetails";
 
 import "./App.css";
 
@@ -68,9 +69,18 @@ function App() {
         }
       >
         <Route index element={<Dashboard user={user} />} />
+
         <Route path="stock" element={<StockBatches user={user} />} />
+
+        {/* QR scan se specific batch ki details open hongi */}
+        <Route
+          path="stock/:batchId"
+          element={<StockBatchDetails user={user} />}
+        />
+
         <Route path="challans" element={<Challans user={user} />} />
         <Route path="movements" element={<Movements />} />
+
         <Route
           path="stock-receipt"
           element={<StockReceipt user={user} />}
