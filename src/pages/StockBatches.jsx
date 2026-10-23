@@ -1,5 +1,5 @@
-
 import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import { apiRequest } from "../services/api";
 
 export default function StockBatches({ user }) {
@@ -20,7 +20,13 @@ export default function StockBatches({ user }) {
   const [retryCount, setRetryCount] = useState(0);
   const [actionId, setActionId] = useState("");
 
+  const [qrBatch, setQrBatch] = useState(null);
+  const [qrImage, setQrImage] = useState("");
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrError, setQrError] = useState("");
+
   const role = user?.role;
+
   const canReviewQuality = [
     "admin",
     "godown_manager",
@@ -144,13 +150,58 @@ export default function StockBatches({ user }) {
         }
       );
 
-      setSuccess(result.message || "Batch quality approved successfully.");
+      setSuccess(
+        result.message || "Batch quality approved successfully."
+      );
+
       setRetryCount((current) => current + 1);
     } catch (err) {
       setError(err.message || "Failed to approve batch quality.");
     } finally {
       setActionId("");
     }
+  };
+
+  const handleGenerateQR = async (batch) => {
+    setQrBatch(batch);
+    setQrImage("");
+    setQrError("");
+    setQrLoading(true);
+
+    try {
+      const batchUrl =
+        `${window.location.origin}/stock/${batch._id}`;
+
+      const image = await QRCode.toDataURL(batchUrl, {
+        width: 260,
+        margin: 2,
+        errorCorrectionLevel: "M",
+      });
+
+      setQrImage(image);
+    } catch {
+      setQrError("Failed to generate QR code.");
+    } finally {
+      setQrLoading(false);
+    }
+  };
+
+  const handleDownloadQR = () => {
+    if (!qrImage || !qrBatch) return;
+
+    const link = document.createElement("a");
+    link.href = qrImage;
+    link.download = `${qrBatch.batchNumber}-QR.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const closeQR = () => {
+    setQrBatch(null);
+    setQrImage("");
+    setQrError("");
+    setQrLoading(false);
   };
 
   return (
@@ -227,7 +278,9 @@ export default function StockBatches({ user }) {
         </div>
 
         {loading ? (
-          <div className="stock-message">Loading stock batches...</div>
+          <div className="stock-message">
+            Loading stock batches...
+          </div>
         ) : error && batches.length === 0 ? (
           <div className="stock-message stock-error">
             <p>Unable to load stock batches.</p>
@@ -254,7 +307,7 @@ export default function StockBatches({ user }) {
                     <th>Receipt Date</th>
                     <th>Quality</th>
                     <th>Status</th>
-                    <th>Action</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
 
@@ -304,20 +357,29 @@ export default function StockBatches({ user }) {
                       </td>
 
                       <td>
-                        {canReviewQuality &&
-                        batch.qualityStatus === "pending" ? (
+                        <div className="stock-actions">
                           <button
                             type="button"
-                            disabled={Boolean(actionId)}
-                            onClick={() => handleQualityApproval(batch)}
+                            onClick={() => handleGenerateQR(batch)}
                           >
-                            {actionId === batch._id
-                              ? "Approving..."
-                              : "Approve Quality"}
+                            View QR
                           </button>
-                        ) : (
-                          "—"
-                        )}
+
+                          {canReviewQuality &&
+                            batch.qualityStatus === "pending" && (
+                              <button
+                                type="button"
+                                disabled={Boolean(actionId)}
+                                onClick={() =>
+                                  handleQualityApproval(batch)
+                                }
+                              >
+                                {actionId === batch._id
+                                  ? "Approving..."
+                                  : "Approve Quality"}
+                              </button>
+                            )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -335,7 +397,9 @@ export default function StockBatches({ user }) {
                 <button
                   type="button"
                   disabled={page <= 1 || loading}
-                  onClick={() => setPage((current) => current - 1)}
+                  onClick={() =>
+                    setPage((current) => current - 1)
+                  }
                 >
                   Previous
                 </button>
@@ -345,7 +409,9 @@ export default function StockBatches({ user }) {
                   disabled={
                     page >= pagination.totalPages || loading
                   }
-                  onClick={() => setPage((current) => current + 1)}
+                  onClick={() =>
+                    setPage((current) => current + 1)
+                  }
                 >
                   Next
                 </button>
@@ -354,6 +420,58 @@ export default function StockBatches({ user }) {
           </>
         )}
       </div>
+
+      {qrBatch && (
+        <div
+          className="panel qr-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="qr-heading"
+        >
+          <div className="panel-heading">
+            <div>
+              <h3 id="qr-heading">Batch QR Code</h3>
+              <p>
+                Batch: <strong>{qrBatch.batchNumber}</strong>
+              </p>
+            </div>
+
+            <button type="button" onClick={closeQR}>
+              Close
+            </button>
+          </div>
+
+          {qrLoading && <p>Generating QR code...</p>}
+
+          {qrError && (
+            <p className="stock-error" role="alert">
+              {qrError}
+            </p>
+          )}
+
+          {qrImage && (
+            <div className="qr-content">
+              <img
+                src={qrImage}
+                alt={`QR code for ${qrBatch.batchNumber}`}
+                width="260"
+                height="260"
+              />
+
+              <p>
+                Scan this code to open the batch traceability page.
+              </p>
+
+              <button
+                type="button"
+                onClick={handleDownloadQR}
+              >
+                Download QR Code
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
